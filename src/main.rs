@@ -1,9 +1,11 @@
 use axum::{
-    extract::Extension,
+    extract::{State, FromRef},
+
     routing::{get, post},
     Router,
 };
 use once_cell::sync::Lazy;
+use sqlx::{PgPool, Postgres};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -19,6 +21,12 @@ static KEYS: Lazy<models::auth::Keys> = Lazy::new(|| {
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "Your secret here".to_owned());
     models::auth::Keys::new(secret.as_bytes())
 });
+#[derive(FromRef, Clone)]
+struct AppState {
+    pool: PgPool,
+}
+
+
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +34,7 @@ async fn main() {
     // initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "axum_api=debug".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "osmium_webapi=debug".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -39,6 +47,9 @@ async fn main() {
         .await
         .expect("unable to connect to database");
 
+    let state = AppState {
+        pool,
+    };
     let app = Router::new()
         .route("/", get(controllers::info::route_info))
         .route("/login", post(controllers::auth::login))
@@ -46,7 +57,9 @@ async fn main() {
         //only loggedin user can access this route
         .route("/user_profile", get(controllers::user::user_profile))
         .layer(cors)
-        .layer(Extension(pool));
+        .with_state(state);
+
+    // .layer(Extension(pool));
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);

@@ -1,18 +1,17 @@
 use axum::{Extension, Json};
+use axum::extract::State;
 use jsonwebtoken::{encode, Header};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
-use crate::{
-    error::AppError,
-    models::{self, auth::Claims},
-    utils::get_timestamp_8_hours_from_now,
-    KEYS,
-};
+use crate::{error::AppError, models::{self, auth::Claims}, utils::get_timestamp_8_hours_from_now, KEYS};
 
+#[axum::debug_handler]
 pub async fn login(
+    State(pool): State<PgPool>,
     Json(credentials): Json<models::auth::User>,
-    Extension(pool): Extension<PgPool>,
+    // Extension(pool): Extension<PgPool>,
+
 ) -> Result<Json<Value>, AppError> {
     // check if email or password is a blank string
     if credentials.email.is_empty() || credentials.password.is_empty() {
@@ -54,9 +53,10 @@ pub async fn login(
     }
 }
 
+#[axum::debug_handler]
 pub async fn register(
+    State(pool): State<PgPool>,
     Json(credentials): Json<models::auth::User>,
-    Extension(pool): Extension<PgPool>,
 ) -> Result<Json<Value>, AppError> {
     // check if email or password is a blank string
     if credentials.email.is_empty() || credentials.password.is_empty() {
