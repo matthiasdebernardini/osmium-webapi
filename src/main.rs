@@ -38,12 +38,22 @@ async fn main() {
         .connect(&durl)
         .await
         .expect("unable to connect to database");
-
+    sqlx::query(
+        r#"
+CREATE TABLE IF NOT EXISTS entries (
+  pubkey text,
+  backup text
+);"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("unable to create table");
     let app = Router::new()
         .route("/", get(controllers::info::route_info))
-        .route("/login", post(controllers::auth::login))
+        // .route("/login", post(controllers::auth::login))
+        .route("/recover", get(controllers::recover::recover_backup))
         .route("/register", post(controllers::auth::register))
-        //only loggedin user can access this route
+        //only logged in user can access this route
         .route("/user_profile", get(controllers::user::user_profile))
         .layer(cors)
         .layer(Extension(pool));

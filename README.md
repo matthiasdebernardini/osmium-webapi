@@ -6,4 +6,3 @@
 DATABASE_URL="postgresql://user:password@host:port/database" cargo run
 ````
 
-**NOTE: for the database i have used cockroachDB, you can also use any postgres DB, but for other database you have to make some changes**
