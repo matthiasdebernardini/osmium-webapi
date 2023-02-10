@@ -1,5 +1,4 @@
-pub mod auth;
 pub mod info;
+pub mod payment;
 pub mod recover;
 pub mod register;
-pub mod user;

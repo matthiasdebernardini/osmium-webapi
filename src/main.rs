@@ -1,5 +1,5 @@
 use axum::{
-    extract::{FromRef},
+    extract::FromRef,
     routing::{get, post},
     Router,
 };
@@ -7,6 +7,7 @@ use once_cell::sync::Lazy;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // import module
@@ -15,11 +16,6 @@ mod error;
 mod models;
 mod utils;
 
-// secret key for JWT token
-static KEYS: Lazy<models::auth::Keys> = Lazy::new(|| {
-    let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "Your secret here".to_owned());
-    models::auth::Keys::new(secret.as_bytes())
-});
 #[derive(FromRef, Clone)]
 struct AppState {
     pool: PgPool,
@@ -28,7 +24,6 @@ struct AppState {
 #[tokio::main]
 async fn main() {
     let durl = std::env::var("DATABASE_URL").expect("set DATABASE_URL env variable, such as DATABASE_URL=postgresql://postgres:password@0.0.0.0:5432 for example");
-    // initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "osmium_webapi=debug".into()),
@@ -48,25 +43,26 @@ async fn main() {
         r#"
 CREATE TABLE IF NOT EXISTS entries (
   pubkey text,
-  backup text
+  backup text,
+  ln_invoice text
 );"#,
     )
     .execute(&pool)
     .await
     .expect("unable to create table");
+    info!("Connected to database");
 
     let state = AppState { pool };
     let app = Router::new()
         .route("/", get(controllers::info::route_info))
-        .route("/login", post(controllers::auth::login))
         .route("/register", post(controllers::register::register))
-        .route("/recover/:pubkey", get(controllers::recover::recover_backup))
-        //only loggedin user can access this route
-        .route("/user_profile", get(controllers::user::user_profile))
+        .route(
+            "/recover/:pubkey",
+            get(controllers::recover::recover_backup),
+        )
+        .route("/payment/:pubkey", get(controllers::payment::payment))
         .layer(cors)
         .with_state(state);
-
-    // .layer(Extension(pool));
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);

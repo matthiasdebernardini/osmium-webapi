@@ -1,16 +1,17 @@
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, sqlx::FromRow)]
-pub struct User {
-    pub email: String,
-    pub password: String,
-}
-
 #[derive(Deserialize, Serialize)]
 pub struct Claims {
     pub pubkey: String,
     pub exp: u64,
+}
+
+#[derive(Deserialize, Serialize, sqlx::FromRow)]
+pub struct Receipts {
+    pub ln_invoice: String,
+    pub ln_preimage: String,
+    pub pubkey: String,
 }
 
 pub struct Keys {

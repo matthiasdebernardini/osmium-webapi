@@ -4,13 +4,11 @@ use serde_json::json;
 #[derive(Debug)]
 pub enum AppError {
     InvalidToken,
-    WrongCredential,
-    MissingCredential,
     MissingData,
     TokenCreation,
     InternalServerError,
-    UserDoesNotExist,
-    EntryAlreadyExits,
+    EntryAlreadyExists,
+    InvoiceNotPaid,
 }
 
 impl IntoResponse for AppError {
@@ -21,12 +19,13 @@ impl IntoResponse for AppError {
                 "an internal server error occured",
             ),
             Self::InvalidToken => (StatusCode::BAD_REQUEST, "invalid token"),
-            Self::MissingCredential => (StatusCode::BAD_REQUEST, "missing credential"),
             Self::MissingData => (StatusCode::BAD_REQUEST, "missing data"),
             Self::TokenCreation => (StatusCode::INTERNAL_SERVER_ERROR, "failed to create token"),
-            Self::WrongCredential => (StatusCode::UNAUTHORIZED, "wrong credentials"),
-            Self::UserDoesNotExist => (StatusCode::UNAUTHORIZED, "User does not exist"),
-            Self::EntryAlreadyExits => (StatusCode::BAD_REQUEST, "Entry already exists"),
+            Self::EntryAlreadyExists => (StatusCode::BAD_REQUEST, "Entry already exists"),
+            Self::InvoiceNotPaid => (
+                StatusCode::PAYMENT_REQUIRED,
+                "Lightning invoice is not paid",
+            ),
         };
         (status, Json(json!({ "error": err_msg }))).into_response()
     }

@@ -1,19 +1,15 @@
-
+use axum::debug_handler;
+use axum::extract::{Path, State};
 use rand::Rng;
 use sqlx::PgPool;
 use std::{thread, time};
-use axum::debug_handler;
-use axum::extract::{Path, State};
 
-use crate::{
-    error::AppError,
-    models::recover::Recover,
-};
-
+use crate::error::AppError;
+use crate::models::recover::PubKey;
 
 #[debug_handler]
 pub async fn recover_backup(
-    Path(pubkey): Path<Recover>,
+    Path(pubkey): Path<PubKey>,
     State(pool): State<PgPool>,
     // Json(entry): Json<models::entry::Entry>,
 ) -> axum::Json<serde_json::Value> {
@@ -28,15 +24,14 @@ pub async fn recover_backup(
     }
 
     // get the user for the email from database
-    let backup =
-        sqlx::query_as::<_,Recover>("SELECT backup FROM entries where pubkey = $1")
-            .bind(&pubkey.0)
-            .fetch_optional(&pool)
-            .await
-            .map_err(|err| {
-                dbg!(err);
-                AppError::InternalServerError
-            });
+    let backup = sqlx::query_as::<_, PubKey>("SELECT backup FROM entries where pubkey = $1")
+        .bind(&pubkey.0)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|err| {
+            dbg!(err);
+            AppError::InternalServerError
+        });
     let backup = match backup {
         Ok(backup) => backup,
         Err(_) => return axum::Json(serde_json::json!("")),
