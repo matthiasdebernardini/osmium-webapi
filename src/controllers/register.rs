@@ -1,5 +1,5 @@
 use axum::extract::State;
-use axum::{Extension, Json};
+use axum::Json;
 use jsonwebtoken::{encode, Header};
 use serde_json::{json, Value};
 use sqlx::PgPool;

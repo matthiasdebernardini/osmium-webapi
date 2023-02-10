@@ -1,11 +1,11 @@
 use axum::{
-    extract::{FromRef, State},
+    extract::{FromRef},
     routing::{get, post},
     Router,
 };
 use once_cell::sync::Lazy;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{PgPool, Postgres};
+use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 

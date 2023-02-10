@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, sqlx::FromRow)]
-pub struct Recover{
-    pub pubkey: String,
-}
+#[derive(Deserialize, Serialize, sqlx::FromRow, Clone, Debug)]
+pub struct Recover(pub String);
