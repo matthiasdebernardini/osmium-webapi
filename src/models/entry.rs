@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Deserialize, Serialize, sqlx::FromRow, Clone)]
 pub struct Entry {
     pub pubkey: String,
     pub backup: String,

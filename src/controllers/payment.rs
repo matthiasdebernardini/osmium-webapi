@@ -1,18 +1,22 @@
 use axum::debug_handler;
 use axum::extract::{Path, State};
+use axum::response::IntoResponse;
 use lnbits_rust::{api::invoice::CreateInvoiceParams, LNBitsClient};
 use rand::Rng;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::{thread, time};
-use axum::response::IntoResponse;
+use tracing::debug;
 
 use crate::error::AppError;
+use crate::models::entry::Entry;
 use crate::models::recover::PubKey;
 
-#[debug_handler]
 pub async fn payment(
     Path(pubkey): Path<PubKey>,
     State(pool): State<PgPool>,
+    State(client): State<LNBitsClient>,
+    State(invoices): State<HashMap<String, String>>,
 ) -> axum::Json<serde_json::Value> {
     dbg!(pubkey.clone());
     if pubkey.0.is_empty() {
@@ -22,21 +26,15 @@ pub async fn payment(
 
         return axum::Json(serde_json::json!(""));
     }
-    // https://legend.lnbits.com/wallet?usr=821dfb899bd0488284642a65b84d7d39&wal=a5504d243e5841d7afda898d49ad1edb
-    let client = LNBitsClient::new(
-        "a5504d243e5841d7afda898d49ad1edb",
-        "1291ce79eeb84b0fb3f9357c543f4924",
-        "0dd665d5eb6d465f9b17f6dd165f2021",
-        "http://legend.lnbits.com",
-        None,
-    )
-    .unwrap();
 
-    let wallet_details = client.get_wallet_details().await.unwrap();
+    let wallet_details = match client.get_wallet_details().await {
+        Ok(wallet_details) => wallet_details,
+        Err(_) => return axum::Json(serde_json::json!("")),
+    };
 
-    println!("wallet_details: {:?}", wallet_details);
+    debug!(wallet_details = ?wallet_details, "wallet_details");
 
-    let invoice = client
+    let invoice = match client
         .create_invoice(&CreateInvoiceParams {
             amount: 1,
             unit: "sat".to_string(),
@@ -46,31 +44,51 @@ pub async fn payment(
             internal: None,
         })
         .await
-        .unwrap();
-
-    println!("invoice: {invoice:?}");
-
-    // get the user for the email from database
-    let existing_pubkey = sqlx::query_as::<_, PubKey>("SELECT pubkey FROM entries where pubkey = $1")
-        .bind(&pubkey.0)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|err| {
-            dbg!(err);
-            AppError::InternalServerError
-        });
-        // .map(|pubkey| pubkey);
-    // dbg!(existing_pubkey.expect("REASON").clone());
-    let existing_pubkey = match existing_pubkey {
-        Ok(pubkey) => pubkey,
+    {
+        Ok(invoice) => invoice.payment_request,
         Err(_) => return axum::Json(serde_json::json!("")),
     };
 
-    match  existing_pubkey {
-        None => axum::Json(serde_json::json!({
-            "pubkey": pubkey,
-            "ln_invoice": invoice.payment_request,
-        })),
-        Some(_) => axum::Json(serde_json::json!("")),
+    debug!(invoice = ?invoice, "invoice");
+    match sqlx::query!(
+        "UPDATE entries SET ln_invoice = $1 WHERE pubkey = $2",
+        &invoice,
+        &pubkey.0
+    )
+        .execute(&pool)
+        .await {
+        Ok(_) => {
+    axum::Json(serde_json::json!({
+        "pubkey": pubkey.clone(),
+        "ln_invoice": invoice,
+    }))},
+        Err(_) => axum::Json(serde_json::json!("")),
     }
 }
+    // check if pubkey already exists
+
+    // let entry = sqlx::query_as::<_, Entry>("SELECT * FROM entries where pubkey = $1")
+    //     .bind(&pubkey.0)
+    //     .fetch_optional(&pool)
+    //     .await;
+
+    // match entry {
+    //     Err(_) => return axum::Json(serde_json::json!("")),
+    //     Ok(o) => match o {
+    //         Some(e) => {
+    //             // update invoice
+    //             let _ = sqlx::query!(
+    //                 "UPDATE entries SET invoice = $1 WHERE pubkey = $2",
+    //                 &invoice,
+    //                 &pubkey.0
+    //             )
+    //             .execute(&pool)
+    //             .await;
+    //             return axum::Json(serde_json::json!(""))
+    //         }
+    //         None => axum::Json(serde_json::json!({
+    //             "pubkey": pubkey.clone(),
+    //             "ln_invoice": invoice,
+    //         })),
+    //     },
+    // }

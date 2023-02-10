@@ -1,11 +1,11 @@
 pub async fn route_info() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({
-        "routes": ["/", "/register", "/login", "/user_profile"],
+        "routes": ["/", "/register", "/payment", "/recover"],
         "routes_info": {
             "/" : "this route",
-            "/register": "register a user with email and password",
-            "/login": "login with the credentials used for registering",
-            "/user_profile": "view your user profile with the token recieved from /login"
+            "/register": "register by entering your pubkey, backup and ln payment",
+            "/login/:pubkey": "request a payment to register your pubkey with",
+            "/recover": "recover your backup by entering your pubkey that was registered with it",
         }
     }))
 }
