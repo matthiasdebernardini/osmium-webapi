@@ -1,3 +1,5 @@
 pub mod auth;
-pub mod user;
 pub mod info;
+pub mod recover;
+pub mod register;
+pub mod user;

@@ -1,12 +1,11 @@
 use axum::{
-    extract::{State, FromRef},
-
+    extract::{FromRef, State},
     routing::{get, post},
     Router,
 };
 use once_cell::sync::Lazy;
-use sqlx::{PgPool, Postgres};
 use sqlx::postgres::PgPoolOptions;
+use sqlx::{PgPool, Postgres};
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -26,11 +25,9 @@ struct AppState {
     pool: PgPool,
 }
 
-
-
 #[tokio::main]
 async fn main() {
-    let durl = std::env::var("DATABASE_URL").expect("set DATABASE_URL env variable");
+    let durl = std::env::var("DATABASE_URL").expect("set DATABASE_URL env variable, such as DATABASE_URL=postgresql://postgres:password@0.0.0.0:5432 for example");
     // initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
@@ -47,13 +44,23 @@ async fn main() {
         .await
         .expect("unable to connect to database");
 
-    let state = AppState {
-        pool,
-    };
+    sqlx::query(
+        r#"
+CREATE TABLE IF NOT EXISTS entries (
+  pubkey text,
+  backup text
+);"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("unable to create table");
+
+    let state = AppState { pool };
     let app = Router::new()
         .route("/", get(controllers::info::route_info))
         .route("/login", post(controllers::auth::login))
-        .route("/register", post(controllers::auth::register))
+        .route("/register", post(controllers::register::register))
+        .route("/recover/:pubkey", get(controllers::recover::recover_backup))
         //only loggedin user can access this route
         .route("/user_profile", get(controllers::user::user_profile))
         .layer(cors)

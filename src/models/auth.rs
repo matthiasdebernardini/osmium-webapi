@@ -9,7 +9,7 @@ pub struct User {
 
 #[derive(Deserialize, Serialize)]
 pub struct Claims {
-    pub email: String,
+    pub pubkey: String,
     pub exp: u64,
 }
 
