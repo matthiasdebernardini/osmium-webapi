@@ -1,12 +1,12 @@
 use axum::extract::State;
 use axum::Json;
+use chrono::prelude::*;
 use lightning_invoice::Invoice;
 use lnbits_rust::{api::invoice::CreateInvoiceParams, LNBitsClient};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::process::exit;
-use chrono::prelude::*;
 
 use crate::{
     error::AppError,
@@ -56,10 +56,12 @@ pub async fn register(
             _ => ten_min_counter += 1,
         }
     }
+
     match sqlx::query!(
-        "UPDATE entries SET ln_invoice = $1, backup = $3 WHERE pubkey = $2",
-        &invoice,
+        // "UPDATE entries SET ln_invoice = $1, backup = $3 WHERE pubkey = $2",
+        "INSERT INTO entries (pubkey, ln_invoice, backup) VALUES ($1, $2, $3)",
         &e.pubkey,
+        &invoice,
         &e.backup
     )
     .execute(&pool)

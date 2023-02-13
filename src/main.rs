@@ -7,6 +7,7 @@ use once_cell::sync::Lazy;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -17,18 +18,17 @@ mod error;
 mod models;
 mod utils;
 use lnbits_rust::{api::invoice::CreateInvoiceParams, LNBitsClient};
+use tokio::sync::RwLock;
 
-// #[derive(FromRef, Clone)]
-// struct LNBitsState {
-//     client: LNBitsClient,
-// }
-#[derive(FromRef, Clone)]
+#[derive(FromRef, Clone, Default)]
 struct AppState {
     pool: PgPool,
     client: LNBitsClient,
     // todo change to pubkey and invoice
     invoices: std::collections::HashMap<String, String>,
 }
+
+type SharedState = Arc<RwLock<AppState>>;
 
 #[tokio::main]
 async fn main() {
@@ -51,7 +51,7 @@ async fn main() {
     sqlx::query(
         r#"
 CREATE TABLE IF NOT EXISTS entries (
-  pubkey text,
+	pubkey  text PRIMARY KEY,
   backup text,
   ln_invoice text
 );"#,
@@ -72,22 +72,28 @@ CREATE TABLE IF NOT EXISTS entries (
     .unwrap();
 
     let mut invoices: HashMap<String, String> = std::collections::HashMap::new();
-    let state = AppState {
+    let shared_state = Arc::new(RwLock::new(AppState {
         pool,
         client,
         invoices,
-    };
+    }));
+
+    // let shared_state = AppState {
+    //     pool,
+    //     client,
+    //     invoices,
+    // };
 
     let app = Router::new()
         .route("/", get(controllers::info::route_info))
+        .route("/payment/:pubkey", get(controllers::payment::payment))
         .route("/register", post(controllers::register::register))
         .route(
             "/recover/:pubkey",
             get(controllers::recover::recover_backup),
         )
-        .route("/payment/:pubkey", get(controllers::payment::payment))
         .layer(cors)
-        .with_state(state);
+        .with_state(Arc::clone(&shared_state));
 
     // Todo add env variable for port
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));

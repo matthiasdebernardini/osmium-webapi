@@ -11,21 +11,37 @@ use tracing::debug;
 use crate::error::AppError;
 use crate::models::entry::Entry;
 use crate::models::recover::PubKey;
+use crate::SharedState;
 
 pub async fn payment(
     Path(pubkey): Path<PubKey>,
-    State(pool): State<PgPool>,
-    State(client): State<LNBitsClient>,
-    State(invoices): State<HashMap<String, String>>,
+    State(state): State<SharedState>,
+
+    // State(pool): State<PgPool>,
+    // State(client): State<LNBitsClient>,
+    // State(&mut invoices): State<HashMap<String, String>>,
 ) -> axum::Json<serde_json::Value> {
+    let db = &state.read().unwrap().db.pool;
+
     dbg!(pubkey.clone());
-    if pubkey.0.is_empty() {
+    eprintln!("pubkey.0.is_empty() {}", pubkey.0.is_empty());
+    eprintln!("invoices.contains_key(&pubkey.0) {}", invoices.contains_key(&pubkey.0));
+    if pubkey.0.is_empty() || invoices.contains_key(&pubkey.0){
         let mut rng = rand::thread_rng();
         let millis = rng.gen_range(0..25);
         thread::sleep(time::Duration::from_millis(millis));
 
         return axum::Json(serde_json::json!(""));
     }
+
+
+    //     .map(|invoice| {
+    //     axum::Json(serde_json::json!({
+    //         "invoice": invoice.clone(),
+    //     }))
+    // }).unwrap_or_else(|| {
+    //     axum::Json(serde_json::json!(""))
+    // })
 
     let wallet_details = match client.get_wallet_details().await {
         Ok(wallet_details) => wallet_details,
@@ -49,46 +65,61 @@ pub async fn payment(
         Err(_) => return axum::Json(serde_json::json!("")),
     };
 
-    debug!(invoice = ?invoice, "invoice");
-    match sqlx::query!(
-        "UPDATE entries SET ln_invoice = $1 WHERE pubkey = $2",
-        &invoice,
-        &pubkey.0
-    )
-        .execute(&pool)
-        .await {
-        Ok(_) => {
-    axum::Json(serde_json::json!({
+    // debug!(invoice = ?invoice, "invoice");
+    println!("invoice: {}", invoice);
+
+    let a = match invoices.insert(pubkey.0.clone(), invoice.clone()) {
+        None => axum::Json(serde_json::json!({
         "pubkey": pubkey.clone(),
         "ln_invoice": invoice,
-    }))},
-        Err(_) => axum::Json(serde_json::json!("")),
+        })),
+        Some(_) => axum::Json(serde_json::json!("")),
+    };
+    for (key, value) in &*invoices {
+        println!("{} / {}", key, value);
     }
-}
-    // check if pubkey already exists
-
-    // let entry = sqlx::query_as::<_, Entry>("SELECT * FROM entries where pubkey = $1")
-    //     .bind(&pubkey.0)
-    //     .fetch_optional(&pool)
-    //     .await;
-
-    // match entry {
-    //     Err(_) => return axum::Json(serde_json::json!("")),
-    //     Ok(o) => match o {
-    //         Some(e) => {
-    //             // update invoice
-    //             let _ = sqlx::query!(
-    //                 "UPDATE entries SET invoice = $1 WHERE pubkey = $2",
-    //                 &invoice,
-    //                 &pubkey.0
-    //             )
-    //             .execute(&pool)
-    //             .await;
-    //             return axum::Json(serde_json::json!(""))
-    //         }
-    //         None => axum::Json(serde_json::json!({
-    //             "pubkey": pubkey.clone(),
-    //             "ln_invoice": invoice,
-    //         })),
-    //     },
+    invoices.clear();
+    a
+    // };
+    // match sqlx::query!(
+    //     "UPDATE entries SET ln_invoice = $1 WHERE pubkey = $2",
+    //     &invoice,
+    //     &pubkey.0
+    // )
+    //     .execute(&pool)
+    //     .await {
+    //     Ok(_) => {
+    // axum::Json(serde_json::json!({
+    //     "pubkey": pubkey.clone(),
+    //     "ln_invoice": invoice,
+    // }))},
+    //     Err(_) => axum::Json(serde_json::json!("")),
     // }
+}
+// check if pubkey already exists
+
+// let entry = sqlx::query_as::<_, Entry>("SELECT * FROM entries where pubkey = $1")
+//     .bind(&pubkey.0)
+//     .fetch_optional(&pool)
+//     .await;
+
+// match entry {
+//     Err(_) => return axum::Json(serde_json::json!("")),
+//     Ok(o) => match o {
+//         Some(e) => {
+//             // update invoice
+//             let _ = sqlx::query!(
+//                 "UPDATE entries SET invoice = $1 WHERE pubkey = $2",
+//                 &invoice,
+//                 &pubkey.0
+//             )
+//             .execute(&pool)
+//             .await;
+//             return axum::Json(serde_json::json!(""))
+//         }
+//         None => axum::Json(serde_json::json!({
+//             "pubkey": pubkey.clone(),
+//             "ln_invoice": invoice,
+//         })),
+//     },
+// }

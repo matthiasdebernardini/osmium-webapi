@@ -1,10 +1,10 @@
 use axum::debug_handler;
 use axum::extract::{Path, State};
+use lightning_invoice::Invoice;
+use lnbits_rust::LNBitsClient;
 use rand::Rng;
 use sqlx::PgPool;
 use std::{thread, time};
-use lightning_invoice::Invoice;
-use lnbits_rust::LNBitsClient;
 
 use crate::error::AppError;
 use crate::models::entry::Entry;
@@ -12,10 +12,8 @@ use crate::models::recover::PubKey;
 
 pub async fn recover_backup(
     Path(pubkey): Path<PubKey>,
-
     State(client): State<LNBitsClient>,
     State(pool): State<PgPool>,
-    // Json(entry): Json<models::entry::Entry>,
 ) -> axum::Json<serde_json::Value> {
     dbg!(pubkey.clone());
     if pubkey.0.is_empty() {
@@ -36,24 +34,23 @@ pub async fn recover_backup(
             AppError::InternalServerError
         });
 
+    println!("entry: {:?}", entry.clone());
+
     let entry = match entry {
-        Ok(entry ) => entry.expect("could not find entry"),
+        Ok(None) => return axum::Json(serde_json::json!("")),
+        Ok(entry) => entry.expect("could not find entry"),
         Err(_) => return axum::Json(serde_json::json!("")),
     };
+    let invoice = entry.ln_invoice.as_str();
 
-    // let entry_in_db = match entry {
-    //     Some(e) => e,
-    //     None => return axum::Json(serde_json::json!("")),
-    // };
-
-
-    let invoice = str::parse::<Invoice>(entry.clone().ln_invoice.as_str()).expect("could not parse invoice");
-    let invoice_timeout = invoice.expiry_time().as_secs();
-    dbg!(invoice_timeout);
+    let invoice = str::parse::<Invoice>(invoice.clone()).expect("could not parse invoice");
     let invoice = invoice.payment_hash().to_string();
-    let mut ten_min_counter = 0;
 
-    while !client.is_invoice_paid(&invoice).await.unwrap() {
+    while !client
+        .is_invoice_paid(&invoice)
+        .await
+        .expect("could not check if invoice is paid")
+    {
         println!("Waiting for payment");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }

@@ -1,7 +1,7 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde_json::json;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AppError {
     InvalidToken,
     MissingData,
