@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -18,10 +18,10 @@ mod error;
 mod models;
 mod utils;
 use lnbits_rust::{api::invoice::CreateInvoiceParams, LNBitsClient};
-use tokio::sync::RwLock;
+// use tokio::sync::RwLock;
 
-#[derive(FromRef, Clone, Default)]
-struct AppState {
+#[derive(FromRef, Clone)]
+pub struct AppState {
     pool: PgPool,
     client: LNBitsClient,
     // todo change to pubkey and invoice
@@ -32,7 +32,6 @@ type SharedState = Arc<RwLock<AppState>>;
 
 #[tokio::main]
 async fn main() {
-    let durl = std::env::var("DATABASE_URL").expect("set DATABASE_URL env variable, such as DATABASE_URL=postgresql://postgres:password@0.0.0.0:5432 for example");
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "osmium_webapi=debug".into()),
@@ -42,9 +41,10 @@ async fn main() {
 
     let cors = CorsLayer::new().allow_origin(Any);
 
+    let url = std::env::var("DATABASE_URL").expect("set DATABASE_URL env variable, such as DATABASE_URL=postgresql://postgres:password@0.0.0.0:5432 for example");
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&durl)
+        .connect(&url)
         .await
         .expect("unable to connect to database");
 
@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS entries (
     .expect("unable to create table");
     info!("Connected to database");
 
+    dbg!("lnbits");
     // https://legend.lnbits.com/wallet?usr=821dfb899bd0488284642a65b84d7d39&wal=a5504d243e5841d7afda898d49ad1edb
     let client = LNBitsClient::new(
         "a5504d243e5841d7afda898d49ad1edb",
@@ -72,18 +73,14 @@ CREATE TABLE IF NOT EXISTS entries (
     .unwrap();
 
     let mut invoices: HashMap<String, String> = std::collections::HashMap::new();
-    let shared_state = Arc::new(RwLock::new(AppState {
+    let app_state = AppState {
         pool,
         client,
         invoices,
-    }));
+    };
+    let shared_state = Arc::new(RwLock::new(app_state));
 
-    // let shared_state = AppState {
-    //     pool,
-    //     client,
-    //     invoices,
-    // };
-
+    dbg!("starting app");
     let app = Router::new()
         .route("/", get(controllers::info::route_info))
         .route("/payment/:pubkey", get(controllers::payment::payment))
@@ -95,6 +92,7 @@ CREATE TABLE IF NOT EXISTS entries (
         .layer(cors)
         .with_state(Arc::clone(&shared_state));
 
+    dbg!("starting server");
     // Todo add env variable for port
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);

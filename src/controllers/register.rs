@@ -12,21 +12,35 @@ use crate::{
     error::AppError,
     models::{self, auth::Claims},
     utils::get_timestamp_one_year_from_now,
+    SharedState,
 };
 
 pub async fn register(
-    State(pool): State<PgPool>,
-    State(client): State<LNBitsClient>,
-    State(invoices): State<HashMap<String, String>>,
+    State(state): State<SharedState>,
+
+    // State(pool): State<PgPool>,
+    // State(client): State<LNBitsClient>,
+    // State(invoices): State<HashMap<String, String>>,
     Json(e): Json<models::entry::Entry>,
 ) -> Result<Json<Value>, AppError> {
     if e.pubkey.is_empty() || e.backup.is_empty() || e.ln_invoice.is_empty() {
         return Err(AppError::MissingData);
     }
-
-    let wallet_details = match client.get_wallet_details().await {
+    let mut invoices = match &state.write(){
+        Ok(invoices) => invoices.invoices.clone(),
+        Err(_) => return Err(AppError::MissingData),
+    };
+    let pool= match &state.write(){
+        Ok(pool) => pool.pool.clone(),
+        Err(_) => return Err(AppError::MissingData),
+    };
+    let lnbits= match &state.write(){
+        Ok(lnbits) => lnbits.client.clone(),
+        Err(_) => return Err(AppError::MissingData),
+    };
+    let wallet_details = match lnbits.get_wallet_details().await {
         Ok(wallet_details) => wallet_details,
-        Err(_) => return Ok(axum::Json(serde_json::json!(""))),
+        Err(_) => return Err(AppError::MissingData),
     };
     println!("wallet_details: {:?}", wallet_details);
 
@@ -46,7 +60,7 @@ pub async fn register(
     let invoice = invoice.payment_hash().to_string();
     let mut ten_min_counter = 0;
 
-    while !client.is_invoice_paid(&invoice).await.unwrap() {
+    while !lnbits.is_invoice_paid(&invoice).await.unwrap() {
         println!("Waiting for payment");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         // wait 10m for payment

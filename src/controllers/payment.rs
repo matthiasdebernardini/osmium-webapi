@@ -16,24 +16,37 @@ use crate::SharedState;
 pub async fn payment(
     Path(pubkey): Path<PubKey>,
     State(state): State<SharedState>,
-
     // State(pool): State<PgPool>,
     // State(client): State<LNBitsClient>,
     // State(&mut invoices): State<HashMap<String, String>>,
 ) -> axum::Json<serde_json::Value> {
-    let db = &state.read().unwrap().db.pool;
+    let mut invoices = match &state.write(){
+        Ok(invoices) => invoices.invoices.clone(),
+        Err(_) => return axum::Json(serde_json::json!("")),
+    };
+    let pool= match &state.write(){
+        Ok(pool) => pool.pool.clone(),
+        Err(_) => return axum::Json(serde_json::json!("")),
+    };
+    let lnbits= match &state.write(){
+        Ok(lnbits) => lnbits.client.clone(),
+        Err(_) => return axum::Json(serde_json::json!("")),
+    };
+
 
     dbg!(pubkey.clone());
-    eprintln!("pubkey.0.is_empty() {}", pubkey.0.is_empty());
-    eprintln!("invoices.contains_key(&pubkey.0) {}", invoices.contains_key(&pubkey.0));
-    if pubkey.0.is_empty() || invoices.contains_key(&pubkey.0){
+    dbg!("pubkey.0.is_empty() {}", pubkey.0.is_empty());
+    dbg!(
+        "invoices.contains_key(&pubkey.0) {}",
+        invoices.contains_key(&pubkey.0)
+    );
+    if pubkey.0.is_empty() || invoices.contains_key(&pubkey.0) {
         let mut rng = rand::thread_rng();
         let millis = rng.gen_range(0..25);
         thread::sleep(time::Duration::from_millis(millis));
 
         return axum::Json(serde_json::json!(""));
     }
-
 
     //     .map(|invoice| {
     //     axum::Json(serde_json::json!({
@@ -43,14 +56,14 @@ pub async fn payment(
     //     axum::Json(serde_json::json!(""))
     // })
 
-    let wallet_details = match client.get_wallet_details().await {
+    let wallet_details = match lnbits.get_wallet_details().await {
         Ok(wallet_details) => wallet_details,
         Err(_) => return axum::Json(serde_json::json!("")),
     };
 
     debug!(wallet_details = ?wallet_details, "wallet_details");
 
-    let invoice = match client
+    let invoice = match lnbits
         .create_invoice(&CreateInvoiceParams {
             amount: 1,
             unit: "sat".to_string(),
@@ -75,10 +88,10 @@ pub async fn payment(
         })),
         Some(_) => axum::Json(serde_json::json!("")),
     };
-    for (key, value) in &*invoices {
+    for (key, value) in &invoices {
         println!("{} / {}", key, value);
     }
-    invoices.clear();
+    // invoices.clear();
     a
     // };
     // match sqlx::query!(

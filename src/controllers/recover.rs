@@ -9,11 +9,13 @@ use std::{thread, time};
 use crate::error::AppError;
 use crate::models::entry::Entry;
 use crate::models::recover::PubKey;
-
+use crate::SharedState;
+#[axum::debug_handler]
 pub async fn recover_backup(
     Path(pubkey): Path<PubKey>,
-    State(client): State<LNBitsClient>,
-    State(pool): State<PgPool>,
+    State(state): State<SharedState>,
+    // State(client): State<LNBitsClient>,
+    // State(pool): State<PgPool>,
 ) -> axum::Json<serde_json::Value> {
     dbg!(pubkey.clone());
     if pubkey.0.is_empty() {
@@ -23,6 +25,19 @@ pub async fn recover_backup(
 
         return axum::Json(serde_json::json!(""));
     }
+
+    let invoices = match &state.write(){
+        Ok(invoices) => invoices.invoices.clone(),
+        Err(_) => return axum::Json(serde_json::json!("")),
+    };
+    let pool= match &state.write(){
+        Ok(pool) => pool.pool.clone(),
+        Err(_) => return axum::Json(serde_json::json!("")),
+    };
+    let lnbits= match &state.write(){
+        Ok(lnbits) => lnbits.client.clone(),
+        Err(_) => return axum::Json(serde_json::json!("")),
+    };
 
     // get the user for the email from database
     let entry = sqlx::query_as::<_, Entry>("SELECT * FROM entries where pubkey = $1")
@@ -41,12 +56,12 @@ pub async fn recover_backup(
         Ok(entry) => entry.expect("could not find entry"),
         Err(_) => return axum::Json(serde_json::json!("")),
     };
-    let invoice = entry.ln_invoice.as_str();
 
+    let invoice = entry.ln_invoice.as_str();
     let invoice = str::parse::<Invoice>(invoice.clone()).expect("could not parse invoice");
     let invoice = invoice.payment_hash().to_string();
 
-    while !client
+    while !lnbits
         .is_invoice_paid(&invoice)
         .await
         .expect("could not check if invoice is paid")
